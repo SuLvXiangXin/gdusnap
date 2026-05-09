@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gdusnap"
+version = "0.1.0"
+description = "Cached gdu-backed disk usage snapshots"
+requires-python = ">=3.10"
+dependencies = ["rich>=13"]
+
+[project.scripts]
+gdusnap = "gdusnap.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
