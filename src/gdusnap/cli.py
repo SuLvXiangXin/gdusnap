@@ -232,6 +232,7 @@ def make_progress() -> Progress:
             finished_style="bold green",
         ),
         TextColumn("[cyan]{task.completed:.0f}/{task.total:.0f}"),
+        TextColumn("[green]{task.fields[size]}"),
         TextColumn("[magenta]{task.fields[current]}"),
         console=ERR_CONSOLE,
         transient=False,
@@ -239,11 +240,16 @@ def make_progress() -> Progress:
     )
 
 
-def show_cache_progress(total: int) -> None:
+def show_cache_progress(total: int, size: int) -> None:
     if total <= 0:
         return
     with make_progress() as progress:
-        task_id = progress.add_task("cache", total=total, current="")
+        task_id = progress.add_task(
+            "cache",
+            total=total,
+            current="",
+            size=human_size(size),
+        )
         progress.update(task_id, completed=total)
         progress.refresh()
 
@@ -436,12 +442,16 @@ def complete_pending_scans(
     jobs: int,
     cross_filesystems: bool,
     stats: ScanStats,
+    initial_size: int,
+    initial_completed: int,
+    total_boundaries: int,
 ) -> None:
     if not pending_scans:
         return
 
     version = gdu_version(gdu_bin)
-    total = len(pending_scans)
+    pending_total = len(pending_scans)
+    scanned_size = initial_size
     next_index = 0
     futures: dict[concurrent.futures.Future[tuple[PendingScan, int, int]], PendingScan] = {}
 
@@ -449,7 +459,7 @@ def complete_pending_scans(
         executor: concurrent.futures.ThreadPoolExecutor,
     ) -> None:
         nonlocal next_index
-        if next_index >= total:
+        if next_index >= pending_total:
             return
         pending = pending_scans[next_index]
         next_index += 1
@@ -463,14 +473,16 @@ def complete_pending_scans(
         futures[future] = pending
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
-        for _ in range(min(jobs, total)):
+        for _ in range(min(jobs, pending_total)):
             submit_next(executor)
 
         with make_progress() as progress:
             task_id = progress.add_task(
                 "scan",
-                total=total,
+                total=total_boundaries,
+                completed=initial_completed,
                 current=active_text(list(futures.values())) or "",
+                size=human_size(scanned_size),
             )
             while futures:
                 done_futures, _ = concurrent.futures.wait(
@@ -482,6 +494,7 @@ def complete_pending_scans(
                     progress.update(
                         task_id,
                         current=active_text(list(futures.values())) or "",
+                        size=human_size(scanned_size),
                     )
                     continue
 
@@ -499,12 +512,14 @@ def complete_pending_scans(
                         gdu_version=version,
                     )
                     stats.gdu_scans += 1
+                    scanned_size += dsize
                     submit_next(executor)
 
                 progress.update(
                     task_id,
-                    completed=stats.gdu_scans,
+                    completed=initial_completed + stats.gdu_scans,
                     current=active_text(list(futures.values())) or "",
+                    size=human_size(scanned_size),
                 )
             progress.refresh()
 
@@ -824,7 +839,7 @@ def scan(args: argparse.Namespace) -> int:
         log_cache_stats(stats.cache_hits, len(pending))
         boundary_total = stats.cache_hits + len(pending)
         if boundary_total and not pending:
-            show_cache_progress(boundary_total)
+            show_cache_progress(boundary_total, tree.total_dsize)
         complete_pending_scans(
             pending_scans=pending,
             cache=cache,
@@ -833,6 +848,9 @@ def scan(args: argparse.Namespace) -> int:
             jobs=args.jobs,
             cross_filesystems=args.cross_filesystems,
             stats=stats,
+            initial_size=tree.total_dsize,
+            initial_completed=stats.cache_hits,
+            total_boundaries=boundary_total,
         )
     finally:
         cache.close()

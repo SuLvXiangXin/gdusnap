@@ -16,15 +16,16 @@ gdusnap scan /path/to/root --output-dir /path/to/output
 
 During a scan, `gdusnap` prints a shallow-scan message, cache hit/miss counts,
 and a compact progress bar for the `gdu` rescans that were not satisfied by
-cache. Progress rendering uses `rich`, so the label, percentage, bar, count, and
-active path are colored in an interactive terminal. The default cache boundary
-is `--max-depth 3`.
+cache. Progress rendering uses `rich`, so the label, percentage, bar, count,
+known scanned size, and active path are colored in an interactive terminal. The
+default cache boundary is `--max-depth 3`.
 
-Progress lines include the number of completed boundary directories and a
-shortened active boundary directory:
+Progress lines include cached and rescanned boundary directories in the count,
+the size known so far, and a shortened active boundary directory. On resume, the
+bar starts at the number of cache hits instead of zero:
 
 ```text
-scan  50.0% ━━━━━━━━━━━━──────────── 1/2 .../root/a +1
+scan  66.7% ━━━━━━━━━━━━━━━━──────── 2/3 12.00 KiB .../root/new
 ```
 
 When all max-depth directories are cached, it prints a completed cache-reuse bar.
